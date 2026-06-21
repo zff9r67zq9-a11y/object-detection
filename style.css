@@ -164,6 +164,8 @@ html, body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .guess-val.custom { color: #60a5fa; }
+.guess-val.learned { color: #c084fc; }
+.guess-line.learned { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .guess-val.low { color: var(--muted); font-weight: 600; }
 
 /* ---------- Controls ---------- */
@@ -235,6 +237,51 @@ input[type="range"]::-moz-range-thumb {
 .chip .count { color: var(--muted); font-weight: 500; }
 .chip-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
 @keyframes chipIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Teach it live (KNN) ---------- */
+.teach { gap: 8px; }
+.teach-hint {
+  font-size: 0.68rem; font-weight: 600; color: #c084fc;
+  text-transform: none; letter-spacing: 0;
+}
+.teach-input { display: flex; gap: 8px; }
+#learnLabel {
+  flex: 1; min-width: 0;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 0.85rem; outline: none;
+}
+#learnLabel:focus { border-color: #c084fc; }
+#learnLabel::placeholder { color: #5a5a72; }
+.btn-learn {
+  appearance: none; cursor: pointer; flex-shrink: 0;
+  background: #c084fc; color: #1e1033; border: none;
+  font-size: 0.85rem; font-weight: 700;
+  padding: 10px 16px; border-radius: 10px;
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+.btn-learn:active { transform: scale(0.97); }
+.btn-learn:disabled { opacity: 0.5; cursor: default; }
+
+.taught { display: flex; flex-wrap: wrap; gap: 8px; }
+.taught:empty { display: none; }
+.taught-item {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 6px 4px 4px;
+  font-size: 0.8rem; font-weight: 600;
+}
+.taught-item img {
+  width: 26px; height: 26px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+}
+.taught-item .t-count { color: var(--muted); font-weight: 500; }
+.taught-item .t-del {
+  appearance: none; border: none; cursor: pointer;
+  background: transparent; color: var(--muted);
+  font-size: 1rem; line-height: 1; padding: 0 4px;
+}
+.taught-item .t-del:hover { color: var(--danger); }
 
 /* ---------- Custom model loader ---------- */
 .custom-model { gap: 8px; }

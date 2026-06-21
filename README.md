@@ -23,6 +23,22 @@ Two models run together:
 So if COCO doesn't know an object, the best-guess line often still names it —
 but it's a guess over the frame, not a precise detection.
 
+### Teach it live (no training step)
+Want it to know *your* keys, *your* mug? Teach it on the spot — no Teachable
+Machine, no export:
+
+1. Start the camera and point at the item.
+2. Type a name in **Teach it live** (e.g. `my keys`) and tap **+ Sample** a few
+   times, moving it around for different angles/distances.
+3. It recognizes it immediately — the **Learned** line (purple) shows the match
+   and confidence, and speaks it when confident.
+
+Under the hood it's a **KNN classifier over MobileNet embeddings**: each sample
+is the frame's 1280-number feature vector stored under your label; live frames
+are matched to the nearest neighbours. Your taught items (and thumbnails) are
+saved in `localStorage`, so they persist across reloads. Remove any item with
+the **×** on its chip. More samples, from varied angles, = more reliable.
+
 ### Custom model (e.g. iPhone-model ID)
 Neither built-in model can name a *specific* product (which iPhone, which car
 trim, etc.) — those classes don't exist in COCO or ImageNet. To recognize your

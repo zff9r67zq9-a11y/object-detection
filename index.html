@@ -39,6 +39,10 @@
 
       <!-- Bottom HUD: custom-model result (optional) + whole-frame best guess -->
       <div class="hud-bottom" id="hudBottom" hidden>
+        <div class="guess-line learned" id="learnLine" hidden>
+          <span class="guess-label">Learned</span>
+          <span class="guess-val learned" id="learnVal">…</span>
+        </div>
         <div class="guess-line custom" id="customLine" hidden>
           <span class="guess-label">Custom</span>
           <span class="guess-val custom" id="customVal">…</span>
@@ -63,6 +67,22 @@
       <div class="control-row">
         <button class="btn-toggle" id="muteBtn" aria-pressed="true">🔊 Voice on</button>
         <button class="btn-toggle" id="ignorePersonBtn" aria-pressed="true">🧍 People shown</button>
+      </div>
+
+      <div class="control-row teach">
+        <label class="control-label" for="learnLabel">
+          Teach it live
+          <span class="teach-hint">point · name · +sample</span>
+        </label>
+        <div class="teach-input">
+          <input type="text" id="learnLabel" autocomplete="off"
+                 placeholder="What is this? e.g. my keys" />
+          <button class="btn-learn" id="addSampleBtn">+ Sample</button>
+        </div>
+        <div class="taught" id="taughtList"></div>
+        <span class="custom-status" id="teachStatus">
+          Point at an item, name it, tap +Sample a few times. It learns instantly.
+        </span>
       </div>
 
       <div class="control-row custom-model">
@@ -105,6 +125,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.min.js"></script>
   <!-- Teachable Machine lib is loaded on demand (only when you tap Load) to keep page load light. -->
   <script src="script.js"></script>
 </body>

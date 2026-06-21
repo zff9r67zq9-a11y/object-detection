@@ -34,6 +34,13 @@
   const customLine = document.getElementById("customLine");
   const customVal = document.getElementById("customVal");
 
+  const learnLabel = document.getElementById("learnLabel");
+  const addSampleBtn = document.getElementById("addSampleBtn");
+  const teachStatus = document.getElementById("teachStatus");
+  const taughtList = document.getElementById("taughtList");
+  const learnLine = document.getElementById("learnLine");
+  const learnVal = document.getElementById("learnVal");
+
   // ---------- State ----------
   let model = null;        // COCO-SSD detector (bounding boxes, 80 classes)
   let classifier = null;   // MobileNet classifier (whole-frame guess, ~1000 classes)
@@ -59,6 +66,15 @@
   // Same idea for the custom model's top label.
   let lastCustomSpoken = "";
   const CUSTOM_MIN = 0.6; // custom model needs decent confidence before announcing
+
+  // KNN "teach it live" — recognizes items you show it on the spot.
+  let knn = null;                 // knnClassifier instance
+  let lastLearnSpoken = "";
+  const KNN_K = 5;                // nearest neighbours to vote
+  const KNN_MIN = 0.7;            // min vote share before we trust/announce a match
+  const thumbs = {};              // label -> small dataURL preview
+  const LS_DATA = "objdet.knn.dataset.v1";
+  const LS_THUMBS = "objdet.knn.thumbs.v1";
   // FPS smoothing
   let fpsEMA = 0;
 
@@ -334,6 +350,140 @@
     }
   }
 
+  // ---------- Teach it live (KNN over MobileNet embeddings) ----------
+  function setTeachStatus(msg, kind) {
+    teachStatus.textContent = msg;
+    teachStatus.classList.remove("ok", "err");
+    if (kind) teachStatus.classList.add(kind);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function initKnn() {
+    if (typeof knnClassifier === "undefined") return;
+    knn = knnClassifier.create();
+    loadKnnFromStorage();
+    renderTaught();
+  }
+
+  // Square center-crop of the current frame as a tiny preview thumbnail.
+  function captureThumb() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const cx = c.getContext("2d");
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const s = Math.min(vw, vh);
+    cx.drawImage(video, (vw - s) / 2, (vh - s) / 2, s, s, 0, 0, 64, 64);
+    return c.toDataURL("image/jpeg", 0.6);
+  }
+
+  function addSample() {
+    const label = learnLabel.value.trim();
+    if (!label) { setTeachStatus("Type a name for the item first.", "err"); learnLabel.focus(); return; }
+    if (!running || !video.videoWidth) { setTeachStatus("Start the camera first.", "err"); return; }
+    if (!classifier) { setTeachStatus("Feature model still loading — try again in a second.", ""); return; }
+    if (!knn) { setTeachStatus("Learning isn't available in this browser.", "err"); return; }
+
+    // MobileNet embedding of the current frame -> one KNN example.
+    const emb = classifier.infer(video, true);
+    knn.addExample(emb, label);
+    emb.dispose();
+
+    thumbs[label] = captureThumb();
+    saveKnnToStorage();
+    renderTaught();
+    learnLine.hidden = false;
+
+    const n = knn.getClassExampleCount()[label];
+    setTeachStatus(`"${label}" — ${n} sample${n > 1 ? "s" : ""}. Add more from different angles/distances.`, "ok");
+    learnLabel.value = label; // keep the name so you can stack samples quickly
+  }
+
+  function deleteClass(label) {
+    if (!knn) return;
+    knn.clearClass(label);
+    delete thumbs[label];
+    if (lastLearnSpoken === label) lastLearnSpoken = "";
+    saveKnnToStorage();
+    renderTaught();
+    if (knn.getNumClasses() === 0) { learnLine.hidden = true; learnVal.textContent = "…"; }
+    setTeachStatus(`Removed "${label}".`, "");
+  }
+
+  function renderTaught() {
+    const counts = knn ? knn.getClassExampleCount() : {};
+    const labels = Object.keys(counts);
+    taughtList.innerHTML = "";
+    for (const label of labels) {
+      const item = document.createElement("div");
+      item.className = "taught-item";
+      const img = thumbs[label] ? `<img src="${thumbs[label]}" alt="" />` : "";
+      item.innerHTML =
+        `${img}<span>${escapeHtml(label)}</span>` +
+        `<span class="t-count">×${counts[label]}</span>` +
+        `<button class="t-del" title="Remove" aria-label="Remove ${escapeHtml(label)}">×</button>`;
+      item.querySelector(".t-del").addEventListener("click", () => deleteClass(label));
+      taughtList.appendChild(item);
+    }
+  }
+
+  async function predictKnn() {
+    if (!knn || !classifier || knn.getNumClasses() === 0) return;
+    const emb = classifier.infer(video, true);
+    let res;
+    try {
+      res = await knn.predictClass(emb, KNN_K);
+    } finally {
+      emb.dispose();
+    }
+    learnLine.hidden = false;
+    const conf = res.confidences[res.label] || 0;
+    learnVal.textContent = `${res.label} ${Math.round(conf * 100)}%`;
+    learnVal.classList.toggle("low", conf < KNN_MIN);
+    if (conf >= KNN_MIN && res.label !== lastLearnSpoken) {
+      speak(res.label);
+      lastLearnSpoken = res.label;
+    } else if (conf < KNN_MIN) {
+      lastLearnSpoken = ""; // allow re-announce when it locks on again
+    }
+  }
+
+  function saveKnnToStorage() {
+    try {
+      const ds = knn.getClassifierDataset();
+      const obj = {};
+      for (const label of Object.keys(ds)) {
+        obj[label] = { data: Array.from(ds[label].dataSync()), shape: ds[label].shape };
+      }
+      localStorage.setItem(LS_DATA, JSON.stringify(obj));
+      localStorage.setItem(LS_THUMBS, JSON.stringify(thumbs));
+    } catch (e) {
+      console.warn("Couldn't save taught items", e);
+      setTeachStatus("Saved in memory, but storage is full — it won't persist on reload.", "err");
+    }
+  }
+
+  function loadKnnFromStorage() {
+    try {
+      const raw = localStorage.getItem(LS_DATA);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        const dataset = {};
+        for (const label of Object.keys(obj)) {
+          dataset[label] = tf.tensor2d(obj[label].data, obj[label].shape);
+        }
+        if (Object.keys(dataset).length) knn.setClassifierDataset(dataset);
+      }
+      const t = localStorage.getItem(LS_THUMBS);
+      if (t) Object.assign(thumbs, JSON.parse(t));
+    } catch (e) {
+      console.warn("Couldn't load taught items", e);
+    }
+  }
+
   // ---------- Detection loop ----------
   async function loop() {
     if (!running) return;
@@ -366,6 +516,7 @@
         updateDetectedUI(filtered);
         updateGuessUI(guesses, filtered);
         updateCustomUI(customPreds);
+        await predictKnn();
 
         // FPS (exponential moving average of detection rate)
         const dt = performance.now() - now;
@@ -483,12 +634,14 @@
     controls.hidden = false;
 
     customLine.hidden = !customModel; // show the custom row only if one is loaded
+    learnLine.hidden = !(knn && knn.getNumClasses() > 0);
 
     running = true;
     detecting = false;
     spokenClasses = new Set();
     lastGuessSpoken = "";
     lastCustomSpoken = "";
+    lastLearnSpoken = "";
     lastDetectTime = 0;
     loop();
   }
@@ -506,6 +659,7 @@
     spokenClasses = new Set();
     lastGuessSpoken = "";
     lastCustomSpoken = "";
+    lastLearnSpoken = "";
 
     hudTop.hidden = true;
     hudBottom.hidden = true;
@@ -537,6 +691,9 @@
   loadModelBtn.addEventListener("click", loadCustomModel);
   customUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") loadCustomModel(); });
 
+  addSampleBtn.addEventListener("click", addSample);
+  learnLabel.addEventListener("keydown", (e) => { if (e.key === "Enter") addSample(); });
+
   ignorePersonBtn.addEventListener("click", () => {
     ignorePerson = !ignorePerson;
     ignorePersonBtn.setAttribute("aria-pressed", String(!ignorePerson));
@@ -565,4 +722,7 @@
   // Start downloading the models right away so they're ready by the time the
   // user taps Start. Runs in the background; failures are surfaced on Start.
   preloadModels();
+
+  // Set up the live-teaching classifier and restore anything taught before.
+  initKnn();
 })();
