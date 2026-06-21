@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>Live Object Detection</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="stage">
+    <!-- Camera feed + detection overlay -->
+    <div class="viewport" id="viewport">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+
+      <!-- Idle / loading / error states live on top of the viewport -->
+      <div class="screen" id="screen">
+        <div class="screen-card">
+          <div class="logo">
+            <span class="dot"></span> LIVE DETECT
+          </div>
+          <p class="screen-msg" id="screenMsg">
+            Real-time object detection that runs entirely in your browser.
+            Nothing is uploaded.
+          </p>
+          <button class="btn-start" id="startBtn">Start camera</button>
+          <p class="screen-sub" id="screenSub">
+            Uses your rear camera on phones. You'll be asked for permission.
+          </p>
+        </div>
+      </div>
+
+      <!-- Top HUD: FPS + status -->
+      <div class="hud-top" id="hudTop" hidden>
+        <span class="pill" id="statusPill"><span class="dot"></span> Detecting</span>
+        <span class="pill mono" id="fpsPill">— fps</span>
+      </div>
+
+      <!-- Bottom HUD: whole-frame "best guess" from the classifier -->
+      <div class="hud-bottom" id="hudBottom" hidden>
+        <span class="guess-label">Best guess</span>
+        <span class="guess-val" id="guessVal">…</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls" id="controls" hidden>
+      <div class="control-row">
+        <label class="control-label" for="threshold">
+          Confidence threshold
+          <span class="mono" id="thresholdVal">60%</span>
+        </label>
+        <input type="range" id="threshold" min="10" max="95" value="60" step="1" />
+      </div>
+
+      <div class="control-row">
+        <button class="btn-mute" id="muteBtn" aria-pressed="false">🔊 Voice on</button>
+        <button class="btn-stop" id="stopBtn">Stop</button>
+      </div>
+
+      <div class="detected">
+        <span class="detected-title">In view</span>
+        <div class="chips" id="chips">
+          <span class="chip-empty">Nothing detected yet</span>
+        </div>
+      </div>
+
+      <p class="note">
+        <strong>Boxes:</strong> COCO-SSD — precise bounding boxes for ~80 object
+        classes (person, car, dog, cup, laptop, phone…).<br />
+        <strong>Best guess:</strong> MobileNet — a single whole-frame label drawn
+        from ~1000 ImageNet classes (covers many things COCO can't box, like a
+        lighter), so it can't pinpoint <em>where</em> the object is.
+      </p>
+    </div>
+  </div>
+
+  <!-- TensorFlow.js + COCO-SSD from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
