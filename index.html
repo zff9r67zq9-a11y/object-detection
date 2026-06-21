@@ -37,10 +37,16 @@
         <span class="pill mono" id="fpsPill">— fps</span>
       </div>
 
-      <!-- Bottom HUD: whole-frame "best guess" from the classifier -->
+      <!-- Bottom HUD: custom-model result (optional) + whole-frame best guess -->
       <div class="hud-bottom" id="hudBottom" hidden>
-        <span class="guess-label">Best guess</span>
-        <span class="guess-val" id="guessVal">…</span>
+        <div class="guess-line custom" id="customLine" hidden>
+          <span class="guess-label">Custom</span>
+          <span class="guess-val custom" id="customVal">…</span>
+        </div>
+        <div class="guess-line">
+          <span class="guess-label">Best guess</span>
+          <span class="guess-val" id="guessVal">…</span>
+        </div>
       </div>
     </div>
 
@@ -57,6 +63,21 @@
       <div class="control-row">
         <button class="btn-toggle" id="muteBtn" aria-pressed="true">🔊 Voice on</button>
         <button class="btn-toggle" id="ignorePersonBtn" aria-pressed="true">🧍 People shown</button>
+      </div>
+
+      <div class="control-row custom-model">
+        <label class="control-label" for="customUrl">
+          Custom model
+          <span class="custom-hint">Teachable Machine → iPhone ID</span>
+        </label>
+        <div class="custom-input">
+          <input type="text" id="customUrl" inputmode="url" autocomplete="off"
+                 placeholder="https://teachablemachine.withgoogle.com/models/…/" />
+          <button class="btn-load" id="loadModelBtn">Load</button>
+        </div>
+        <span class="custom-status" id="customStatus">
+          Train a model on photos of each iPhone, then paste its shared URL here.
+        </span>
       </div>
 
       <div class="control-row">
@@ -84,6 +105,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

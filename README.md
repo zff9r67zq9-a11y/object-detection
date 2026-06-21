@@ -23,6 +23,25 @@ Two models run together:
 So if COCO doesn't know an object, the best-guess line often still names it —
 but it's a guess over the frame, not a precise detection.
 
+### Custom model (e.g. iPhone-model ID)
+Neither built-in model can name a *specific* product (which iPhone, which car
+trim, etc.) — those classes don't exist in COCO or ImageNet. To recognize your
+own categories you can plug in a **Teachable Machine** image model:
+
+1. Go to https://teachablemachine.withgoogle.com → **Image Project → Standard**.
+2. Make a class per thing you want (e.g. `iPhone SE`, `iPhone 15 Pro`), and add
+   lots of photos of each from different angles/lighting. **More, varied photos
+   = better.**
+3. **Train**, then **Export → TensorFlow.js → Upload (shareable link)**. Copy the
+   URL it gives you (looks like `https://teachablemachine.withgoogle.com/models/XXXX/`).
+4. Start the camera here, paste that URL into **Custom model**, tap **Load**. Its
+   top label shows in the bottom overlay (blue) and is spoken when confident.
+
+**Reality check:** lookalike phones (iPhone 14 vs 15 vs 16) are extremely hard to
+tell apart visually and will be unreliable. Coarse, visually-distinct splits
+(home-button iPhone vs notch vs Dynamic Island; single vs triple camera) work far
+better. Vision can't read the exact model the way Settings → About can.
+
 ## Run locally
 The camera (`getUserMedia`) only works on `localhost` or HTTPS. From this folder:
 

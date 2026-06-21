@@ -28,9 +28,16 @@
   const stopBtn = document.getElementById("stopBtn");
   const chips = document.getElementById("chips");
 
+  const customUrl = document.getElementById("customUrl");
+  const loadModelBtn = document.getElementById("loadModelBtn");
+  const customStatus = document.getElementById("customStatus");
+  const customLine = document.getElementById("customLine");
+  const customVal = document.getElementById("customVal");
+
   // ---------- State ----------
   let model = null;        // COCO-SSD detector (bounding boxes, 80 classes)
   let classifier = null;   // MobileNet classifier (whole-frame guess, ~1000 classes)
+  let customModel = null;  // optional Teachable Machine model (e.g. iPhone-model ID)
   let stream = null;
   let running = false;
   let detecting = false;          // true while a forward pass is in flight
@@ -47,6 +54,9 @@
   // Last best-guess class we announced, so we don't repeat it every frame.
   let lastGuessSpoken = "";
   const GUESS_MIN = 0.18; // min classifier confidence before we trust/announce it
+  // Same idea for the custom model's top label.
+  let lastCustomSpoken = "";
+  const CUSTOM_MIN = 0.6; // custom model needs decent confidence before announcing
   // FPS smoothing
   let fpsEMA = 0;
 
@@ -256,6 +266,56 @@
     }
   }
 
+  // ---------- Custom model (Teachable Machine) ----------
+  function setCustomStatus(msg, kind) {
+    customStatus.textContent = msg;
+    customStatus.classList.remove("ok", "err");
+    if (kind) customStatus.classList.add(kind);
+  }
+
+  async function loadCustomModel() {
+    let base = customUrl.value.trim();
+    if (!base) { setCustomStatus("Paste a Teachable Machine model URL first.", "err"); return; }
+    // Teachable Machine shares a folder URL; the files live under it.
+    if (!base.endsWith("/")) base += "/";
+    if (typeof tmImage === "undefined") {
+      setCustomStatus("Teachable Machine library didn't load — check your connection.", "err");
+      return;
+    }
+    loadModelBtn.disabled = true;
+    setCustomStatus("Loading custom model…");
+    try {
+      const m = await tmImage.load(base + "model.json", base + "metadata.json");
+      customModel = m;
+      lastCustomSpoken = "";
+      customLine.hidden = false;
+      setCustomStatus(`Loaded — ${m.getTotalClasses()} classes. Point the camera at a phone.`, "ok");
+    } catch (err) {
+      console.error(err);
+      customModel = null;
+      customLine.hidden = true;
+      setCustomStatus("Couldn't load that model. Use the model's shared URL (ending in its folder).", "err");
+    } finally {
+      loadModelBtn.disabled = false;
+    }
+  }
+
+  function updateCustomUI(preds) {
+    if (!customModel || !preds || !preds.length) return;
+    // Teachable Machine returns every class unsorted — pick the highest.
+    let top = preds[0];
+    for (const p of preds) if (p.probability > top.probability) top = p;
+
+    const pct = Math.round(top.probability * 100);
+    customVal.textContent = `${top.className} ${pct}%`;
+    customVal.classList.toggle("low", top.probability < CUSTOM_MIN);
+
+    if (top.probability >= CUSTOM_MIN && top.className !== lastCustomSpoken) {
+      speak(top.className);
+      lastCustomSpoken = top.className;
+    }
+  }
+
   // ---------- Detection loop ----------
   async function loop() {
     if (!running) return;
@@ -268,17 +328,19 @@
       detecting = true;
       lastDetectTime = now;
       try {
-        // Run the box detector and the whole-frame classifier together.
-        const [raw, guesses] = await Promise.all([
-          model.detect(video, 20),
-          classifier.classify(video, 3),
-        ]);
+        // Run the box detector, the whole-frame classifier, and (if loaded)
+        // the custom model — all on the same frame, in parallel.
+        const tasks = [model.detect(video, 20), classifier.classify(video, 3)];
+        if (customModel) tasks.push(customModel.predict(video));
+        const [raw, guesses, customPreds] = await Promise.all(tasks);
+
         const filtered = raw.filter(
           (p) => p.score >= threshold && !(ignorePerson && p.class === "person")
         );
         drawDetections(filtered);
         updateDetectedUI(filtered);
         updateGuessUI(guesses, filtered);
+        updateCustomUI(customPreds);
 
         // FPS (exponential moving average of detection rate)
         const dt = performance.now() - now;
@@ -363,10 +425,13 @@
     hudBottom.hidden = false;
     controls.hidden = false;
 
+    customLine.hidden = !customModel; // show the custom row only if one is loaded
+
     running = true;
     detecting = false;
     spokenClasses = new Set();
     lastGuessSpoken = "";
+    lastCustomSpoken = "";
     lastDetectTime = 0;
     loop();
   }
@@ -383,6 +448,7 @@
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     spokenClasses = new Set();
     lastGuessSpoken = "";
+    lastCustomSpoken = "";
 
     hudTop.hidden = true;
     hudBottom.hidden = true;
@@ -410,6 +476,9 @@
     muteBtn.textContent = voiceOn ? "🔊 Voice on" : "🔇 Voice off";
     if (!voiceOn && "speechSynthesis" in window) window.speechSynthesis.cancel();
   });
+
+  loadModelBtn.addEventListener("click", loadCustomModel);
+  customUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") loadCustomModel(); });
 
   ignorePersonBtn.addEventListener("click", () => {
     ignorePerson = !ignorePerson;

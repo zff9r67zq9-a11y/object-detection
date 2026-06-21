@@ -141,10 +141,10 @@ html, body {
   font-size: 0.78rem; font-weight: 600;
 }
 
-/* ---------- Bottom HUD (best guess) ---------- */
+/* ---------- Bottom HUD (custom model + best guess) ---------- */
 .hud-bottom {
   position: absolute; left: 12px; right: 12px; bottom: 12px;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; flex-direction: column; gap: 6px;
   background: rgba(10, 10, 15, 0.62);
   border: 1px solid var(--line);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
@@ -152,14 +152,18 @@ html, body {
   pointer-events: none;
 }
 .hud-bottom[hidden] { display: none; }
+.guess-line { display: flex; align-items: center; gap: 10px; }
+.guess-line[hidden] { display: none; }
+.guess-line.custom { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .guess-label {
   font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--muted); font-weight: 700; flex-shrink: 0;
+  color: var(--muted); font-weight: 700; flex-shrink: 0; min-width: 64px;
 }
 .guess-val {
   font-size: 0.92rem; font-weight: 700; color: #facc15;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.guess-val.custom { color: #60a5fa; }
 .guess-val.low { color: var(--muted); font-weight: 600; }
 
 /* ---------- Controls ---------- */
@@ -231,6 +235,35 @@ input[type="range"]::-moz-range-thumb {
 .chip .count { color: var(--muted); font-weight: 500; }
 .chip-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
 @keyframes chipIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Custom model loader ---------- */
+.custom-model { gap: 8px; }
+.custom-hint {
+  font-size: 0.68rem; font-weight: 600; color: #60a5fa;
+  text-transform: none; letter-spacing: 0;
+}
+.custom-input { display: flex; gap: 8px; }
+#customUrl {
+  flex: 1; min-width: 0;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 0.82rem;
+  outline: none;
+}
+#customUrl:focus { border-color: #60a5fa; }
+#customUrl::placeholder { color: #5a5a72; }
+.btn-load {
+  appearance: none; cursor: pointer; flex-shrink: 0;
+  background: #60a5fa; color: #06192e; border: none;
+  font-size: 0.85rem; font-weight: 700;
+  padding: 10px 16px; border-radius: 10px;
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+.btn-load:active { transform: scale(0.97); }
+.btn-load:disabled { opacity: 0.55; cursor: default; }
+.custom-status { font-size: 0.74rem; color: var(--muted); line-height: 1.4; }
+.custom-status.ok { color: var(--accent); }
+.custom-status.err { color: var(--danger); }
 
 .note { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
 .note strong { color: var(--text); }
