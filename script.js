@@ -38,6 +38,8 @@
   let model = null;        // COCO-SSD detector (bounding boxes, 80 classes)
   let classifier = null;   // MobileNet classifier (whole-frame guess, ~1000 classes)
   let customModel = null;  // optional Teachable Machine model (e.g. iPhone-model ID)
+  let modelPromise = null; // in-flight detector load (started on page open)
+  let classifierPromise = null; // in-flight classifier load (background)
   let stream = null;
   let running = false;
   let detecting = false;          // true while a forward pass is in flight
@@ -245,6 +247,12 @@
 
   // ---------- Whole-frame "best guess" (classifier) ----------
   function updateGuessUI(guesses, detected) {
+    // null = classifier still downloading in the background.
+    if (guesses === null) {
+      guessVal.textContent = "loading…";
+      guessVal.classList.add("low");
+      return;
+    }
     const top = guesses && guesses[0];
     if (!top || top.probability < GUESS_MIN) {
       guessVal.textContent = "—";
@@ -273,18 +281,28 @@
     if (kind) customStatus.classList.add(kind);
   }
 
+  const TM_LIB = "https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js";
+  function ensureScript(src) {
+    return new Promise((resolve, reject) => {
+      if ([...document.scripts].some((s) => s.src === src)) return resolve();
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("script load failed"));
+      document.head.appendChild(s);
+    });
+  }
+
   async function loadCustomModel() {
     let base = customUrl.value.trim();
     if (!base) { setCustomStatus("Paste a Teachable Machine model URL first.", "err"); return; }
     // Teachable Machine shares a folder URL; the files live under it.
     if (!base.endsWith("/")) base += "/";
-    if (typeof tmImage === "undefined") {
-      setCustomStatus("Teachable Machine library didn't load — check your connection.", "err");
-      return;
-    }
     loadModelBtn.disabled = true;
     setCustomStatus("Loading custom model…");
     try {
+      // Pull the Teachable Machine library only now (kept out of page load).
+      if (typeof tmImage === "undefined") await ensureScript(TM_LIB);
       const m = await tmImage.load(base + "model.json", base + "metadata.json");
       customModel = m;
       lastCustomSpoken = "";
@@ -328,11 +346,18 @@
       detecting = true;
       lastDetectTime = now;
       try {
-        // Run the box detector, the whole-frame classifier, and (if loaded)
-        // the custom model — all on the same frame, in parallel.
-        const tasks = [model.detect(video, 20), classifier.classify(video, 3)];
-        if (customModel) tasks.push(customModel.predict(video));
-        const [raw, guesses, customPreds] = await Promise.all(tasks);
+        // Detector always runs. Classifier and custom model join in only once
+        // they've finished loading in the background.
+        const hasClf = !!classifier;
+        const hasCustom = !!customModel;
+        const tasks = [model.detect(video, 20)];
+        if (hasClf) tasks.push(classifier.classify(video, 3));
+        if (hasCustom) tasks.push(customModel.predict(video));
+        const results = await Promise.all(tasks);
+
+        const raw = results[0];
+        const guesses = hasClf ? results[1] : null;
+        const customPreds = hasCustom ? results[hasClf ? 2 : 1] : null;
 
         const filtered = raw.filter(
           (p) => p.score >= threshold && !(ignorePerson && p.class === "person")
@@ -357,26 +382,58 @@
     rafId = requestAnimationFrame(loop);
   }
 
+  // ---------- Model preloading ----------
+  // Kick off downloads the moment the page opens so the wait overlaps with the
+  // user reading the intro. Each promise also warms up its WebGL shaders on a
+  // blank canvas, so the first real frame isn't janky.
+  function preloadModels() {
+    if (!modelPromise) {
+      modelPromise = (async () => {
+        await tf.ready();
+        // Full 'mobilenet_v2' base = more reliable boxes than the lite base.
+        const m = await cocoSsd.load({ base: "mobilenet_v2" });
+        try { await m.detect(warmCanvas()); } catch (_) {}
+        model = m;
+        return m;
+      })();
+      modelPromise.catch(() => {}); // handled where awaited; avoid unhandled rejection
+    }
+    if (!classifierPromise) {
+      classifierPromise = (async () => {
+        await tf.ready();
+        const c = await mobilenet.load({ version: 2, alpha: 1.0 });
+        try { await c.classify(warmCanvas()); } catch (_) {}
+        classifier = c; // loop starts using it automatically once set
+        return c;
+      })();
+      classifierPromise.catch(() => {});
+    }
+  }
+
+  function warmCanvas() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    return c;
+  }
+
   // ---------- Start / stop ----------
   async function start() {
     startBtn.disabled = true;
 
-    // 1) Load both models (cached after first download).
-    if (!model || !classifier) {
-      showScreen({ msg: "Loading models…", sub: "First load downloads ~25 MB (detector + classifier).", spinner: true });
+    // 1) The detector is the only thing the live feed needs. It's usually
+    // already loaded (we preload on page open), so this resolves instantly;
+    // only show a spinner if it isn't ready yet. The classifier keeps loading
+    // in the background and wires itself in when done.
+    preloadModels();
+    if (!model) {
+      showScreen({ msg: "Warming up detector…", sub: "Almost there — first load only.", spinner: true });
       try {
-        // Full 'mobilenet_v2' base = more reliable boxes than the lite base.
-        // MobileNet classifier adds ~1000 ImageNet classes as a whole-frame guess.
-        const [m, c] = await Promise.all([
-          model || cocoSsd.load({ base: "mobilenet_v2" }),
-          classifier || mobilenet.load({ version: 2, alpha: 1.0 }),
-        ]);
-        model = m;
-        classifier = c;
+        model = await modelPromise;
       } catch (err) {
         console.error(err);
+        modelPromise = null; // allow a fresh attempt on retry
         showScreen({
-          msg: "Couldn't load the models.",
+          msg: "Couldn't load the detector.",
           sub: "Check your internet connection and try again.",
           button: "Retry",
           error: true,
@@ -504,4 +561,8 @@
     sub: "Uses your rear camera on phones. You'll be asked for permission.",
     button: "Start camera",
   });
+
+  // Start downloading the models right away so they're ready by the time the
+  // user taps Start. Runs in the background; failures are surfaced on Start.
+  preloadModels();
 })();

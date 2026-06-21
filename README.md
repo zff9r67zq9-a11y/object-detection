@@ -72,6 +72,17 @@ so the camera works from any device on any network.
 - **Voice** — speaks each object class aloud the first time it appears in view
   (not repeated every frame). Toggle off with the voice button.
 
+## Loading speed
+- Models **start downloading the moment the page opens** (in the background),
+  so by the time you tap Start they're usually ready and it's near-instant.
+- The live feed + boxes appear as soon as the **detector** is ready; the
+  MobileNet classifier finishes loading in the background and the "best guess"
+  line switches from `loading…` to a label when it's done — you don't wait on it.
+- Both models warm up their GPU shaders during preload, so the first frame
+  isn't janky. The Teachable Machine library is only fetched if you use it.
+- Model files are served with long cache headers, so repeat visits load from
+  the browser cache (no re-download) unless you hard-refresh.
+
 ## Notes
 - Rear camera (`facingMode: "environment"`) is preferred, with automatic
   fallback to the front camera.
