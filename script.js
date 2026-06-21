@@ -24,6 +24,7 @@
   const thresholdInput = document.getElementById("threshold");
   const thresholdVal = document.getElementById("thresholdVal");
   const muteBtn = document.getElementById("muteBtn");
+  const ignorePersonBtn = document.getElementById("ignorePersonBtn");
   const stopBtn = document.getElementById("stopBtn");
   const chips = document.getElementById("chips");
 
@@ -36,6 +37,7 @@
   let rafId = null;
   let threshold = 0.6;
   let voiceOn = true;
+  let ignorePerson = false;  // when true, drop all "person" detections
 
   let lastDetectTime = 0;
   const MIN_INTERVAL_MS = 1000 / 15; // cap detection at ~15 Hz; skip frames otherwise
@@ -271,7 +273,9 @@
           model.detect(video, 20),
           classifier.classify(video, 3),
         ]);
-        const filtered = raw.filter((p) => p.score >= threshold);
+        const filtered = raw.filter(
+          (p) => p.score >= threshold && !(ignorePerson && p.class === "person")
+        );
         drawDetections(filtered);
         updateDetectedUI(filtered);
         updateGuessUI(guesses, filtered);
@@ -405,6 +409,14 @@
     muteBtn.setAttribute("aria-pressed", String(voiceOn));
     muteBtn.textContent = voiceOn ? "🔊 Voice on" : "🔇 Voice off";
     if (!voiceOn && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  });
+
+  ignorePersonBtn.addEventListener("click", () => {
+    ignorePerson = !ignorePerson;
+    ignorePersonBtn.setAttribute("aria-pressed", String(!ignorePerson));
+    ignorePersonBtn.textContent = ignorePerson ? "🚫 People hidden" : "🧍 People shown";
+    // Stop "person" lingering in the spoken-set so it re-announces if shown again.
+    if (ignorePerson) spokenClasses.delete("person");
   });
 
   // Keep the overlay aligned when the viewport changes (rotation, resize).
